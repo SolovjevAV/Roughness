@@ -1,0 +1,121 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Sep  2 21:26:55 2020
+
+@author: Andrey
+"""
+
+
+import pyperclip, numpy as np
+from scipy.ndimage import gaussian_filter
+import matplotlib.pyplot as plt
+
+
+def read_file(): #Чтение данных из файла по скопированному пути 
+    fileName = pyperclip.paste()
+    if fileName[0] == '"':
+        fileName = fileName[1:-1]
+    
+    f = open(fileName, 'r')
+    fl = f.read()
+    tempFile = fl.replace('=', ' ')
+    newFile = open('tempData.txt', 'w')
+    newFile.write(tempFile)
+    newFile.close()
+    return(tempFile)
+
+def constanta():
+    interval_lin = 'INTERVAL_LIN'
+    pretrav_lin = 'PRETRAV_LIN'
+    posttrav_lin = 'POSTTRAV_LIN'
+    no_points = 'NO_POINTS'
+    start_x = 'START_X'
+    stop_x = 'STOP_X'
+    #[PROFILE_HISTORY]
+    ProductName = "ProductName "
+    ProductVersion = 'ProductVersion '
+    MachineName = 'MachineName '
+    MachineNumber = 'MachineNumber '
+    ProbeName = 'ProbeName '
+    VLIN = 'VLIN '
+    DateTime = 'DateTime '
+    profile_values = '[PROFILE_VALUES]'
+    return(interval_lin, pretrav_lin, posttrav_lin, no_points, start_x, stop_x, '''ProductName, ProductVersion, MachineName, MachineNumber,
+           ProbeName, VLIN, DateTime, profile_values, sigma1''')
+
+data_file = read_file()
+
+str_name = constanta()
+name = {}
+for i in range(0, len(str_name)-1):
+    name[str_name[i]] = float(data_file[data_file.find(str_name[i]) + len(str_name[i]) : data_file.find('\n',data_file.find(str_name[i]) + len(str_name[i]))])
+
+#Данные по всей длине трасировки
+data_set = data_file[data_file.find('[PROFILE_VALUES]')+len('[PROFILE_VALUES]')+1::].split('\n')
+dt1 = [('№', 'i2'), ('X', 'f4'), ('Y', 'f4'), ('Z', 'f4')]
+all_trav = np.genfromtxt(data_set, dtype=dt1) #Полная длина трассировки
+# длина трассировки без участка разгона и торможения.
+trav = all_trav[int(name['PRETRAV_LIN']/name['INTERVAL_LIN']):-int(name['POSTTRAV_LIN']/name['INTERVAL_LIN'])]
+
+Y_hor = []
+
+for i in range(0,len(trav['Y'])):
+    Y_hor.append(trav['Y'][i] *1000 )#- np.average(trav['Y']))
+
+X = trav['X']-trav['X'][0]
+Y = Y_hor
+Lc = 0.25 #mm
+Ls = 2.5 #mcm
+Ls = Ls/1000
+Ls_n = Ls/name['INTERVAL_LIN']
+Lc_n = Lc/name['INTERVAL_LIN']/2
+Y_Lc = gaussian_filter(Y, Lc_n)
+Y_Ls = gaussian_filter(Y, Ls_n)
+
+
+Y = Y-Y_Lc
+#Y = Y - Y_Ls
+n = 5
+Ra = round(np.average(np.abs(Y)),3)
+Y_n = np.split(Y, n)
+X_n = np.split(X, n)
+
+plt.subplots(figsize=(15, 3))
+plt.plot(X,Y)
+#plt.plot(X,Y_Lc)
+Ra_n = []
+for i in range(0, n):
+    plt.plot(X_n[i], Y_n[i])
+    Ra_n.append(np.average(np.abs(Y_n[i])))
+
+Ra_s = round(np.average(Ra_n), 3)
+
+print(Ra, '\n', Ra_s)
+
+# #Расчет параметров начала и окончания расчетного интервала
+# x_start = name['PRETRAV_LIN'] #Начало рассчетного участка по X
+# x_stop = name['STOP_X'] - name['POSTTRAV_LIN'] # Конец рассчетного участка по X
+# n_start = int(x_start/name['INTERVAL_LIN']) # Номер индекса начала рассчетного участка
+# n_stop = int(x_stop/name['INTERVAL_LIN']) #Номер индекса конца рассчетного участка
+# calc_trav = all_trav[n_start:n_stop] #Расчетная длина трассировки
+# calc_trav['Y'] = calc_trav['Y'] - np.average(calc_trav['Y'])
+# calc_trav_n = np.split(calc_trav, n_interval) #Разделение расчетной длины на количество интервалов n
+
+# gaus_filter_n = []
+# for i in range(n_interval):
+#     gaus_filter_n.append(gaussian_filter(calc_trav_n[i]['Y'], sigma=500))
+#     gaus_filter_n[i] = calc_trav_n[i]['Y'] - gaus_filter_n[i]
+
+# Ra_i, Ra_i_gauss = [], []
+# for i in range(n_interval):
+#     Ra_i.append(np.average(abs(calc_trav_n[i]['Y'])))
+#     Ra_i_gauss.append(np.average(abs(gaus_filter_n[i])))
+# print('Ra = ', np.average(Ra_i)*1000)
+#print('Ra gauss = ', np.average(Ra_i_gauss)*1000)
+
+# plt.subplots(figsize=(20,3))
+# for i in range(n_interval):
+#     plt.plot(calc_trav_n[i]['X'], calc_trav_n[i]['Y'])
+
+# for i in range(n_interval):
+#     plt.plot(calc_trav_n[i]['X'], gaus_filter_n[i])
